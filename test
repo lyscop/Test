@@ -1,0 +1,58 @@
+var clientId = "1UVb6fiUzC1hyzwT2zvsOcwi";
+var clientSecret = "de1XdmFwNKx32NWw3b4LHsPh0AvyyALT";
+sp.Sleep(100);
+//Create a new Bitmap in memory
+var memoryImage = new drawing.System.Drawing.Bitmap(action.Bounds.Width, action.Bounds.Height);
+//Create a graphics object associated with the bitmap
+var memoryGraphics = drawing.System.Drawing.Graphics.FromImage(memoryImage);
+//Copy the screen within the bounding rectangle of the drawn gesture area
+//I used a square gesture since that seems more intuitive, but it's not neccessary
+memoryGraphics.CopyFromScreen(action.Bounds.X, action.Bounds.Y, 0, 0, action.Bounds.Size);
+var ms = new clr.System.IO.MemoryStream();
+memoryImage.Save(ms, drawing.System.Drawing.Imaging.ImageFormat.Png);
+ms.Position = 0;
+var base64Image = clr.System.Convert.ToBase64String(ms.GetBuffer());
+memoryGraphics.Dispose();
+memoryImage.Dispose();
+ms.Dispose()
+
+var authHost = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=" + clientId + "&client_secret=" + clientSecret;
+var client = new http.System.Net.Http.HttpClient();
+var json = client.GetStringAsync(authHost);
+var obj = JSON.parse(json.Result);
+client.Dispose();
+
+if (obj.access_token) {
+    var token = obj.access_token;
+    var ocrHost = "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=" + token;
+    var request = clr.System.Net.WebRequest.Create(ocrHost);
+    request.Method = "post";
+    var encoding = clr.System.Text.Encoding.Default;
+    var paraString = "image=" + clr.System.Net.WebUtility.UrlEncode(base64Image);
+    var buffer =  encoding.GetBytes(paraString);
+    request.ContentLength = buffer.Length;
+    request.GetRequestStream().Write(buffer, 0, buffer.Length);
+
+    var response = request.GetResponse();
+    var reader = new clr.System.IO.StreamReader(response.GetResponseStream(), clr.System.Text.Encoding.UTF8);
+    var result = reader.ReadToEnd();
+
+    var json = JSON.parse(result);
+    var jsonArray = json.words_result;
+    if (jsonArray) {
+        var OCRText = "";
+        for(var i=0; i<jsonArray.length; i++) {
+            OCRText += jsonArray[i].words
+        }
+        if (OCRText.length) {
+            clip.SetText(OCRText);
+            clr.System.Media.SystemSounds.Asterisk.Play();
+        }
+    }
+    else {
+        clip.SetText(result);
+    }
+     
+    response.Dispose();
+    reader.Dispose();
+}
